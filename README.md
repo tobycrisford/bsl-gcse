@@ -52,5 +52,5 @@ The notes in the deck ought to be in order of frequency, so that users see the m
 - In terms of file size, the deck is already fairly small. If you want to make it extremely tiny, at the cost of needing to download the videos when they appear for review, you could eschew the `download_videos` step and replace `{{Video}}` in the Anki card templates with the following:
 
 ``` html
-<iframe src={{VideoURL}}></iframe>
+<iframe src="{{VideoURL}}"></iframe>
 ```
