@@ -169,11 +169,18 @@ def add_signs(signs, tags, output):
     write_csv(output, notes)
 
 
-def sort_notes_by_tag(custom_tag_order: Collection[str], notes: list[Note], batch_limit: int) -> list[Note]:
+def sort_notes_by_tag(
+    custom_tag_order: Collection[str],
+    notes: list[Note],
+    batch_limit: int,
+    shuffle_within_tags: bool,
+) -> list[Note]:
     """Sort notes by tag, using custom tag order.
     Only take batch_limit words from each tag before moving onto next.
     Keep cycling through the given tag list extracting batches until none of any listed tag remains.
     Then assign any remaining words not covered by supplied tags.
+
+    Can cope fine with overlapping tags.
     """
 
     tracked_notes = [{'selected': False, 'note': note} for note in notes]
@@ -201,7 +208,10 @@ def sort_notes_by_tag(custom_tag_order: Collection[str], notes: list[Note], batc
                 continue
 
             notes_with_tag = notes_by_tag[tag]
-            traversal_order = np.random.choice(len(notes_with_tag), size=len(notes_with_tag), replace=False)
+            if shuffle_within_tags:
+                traversal_order = np.random.choice(len(notes_with_tag), size=len(notes_with_tag), replace=False)
+            else:
+                traversal_order = range(len(notes_with_tag))
             counter = 0
             for idx in traversal_order:
                 if _add_note(sorted_notes, notes_with_tag[idx]):
@@ -218,8 +228,14 @@ def sort_notes_by_tag(custom_tag_order: Collection[str], notes: list[Note], batc
 
     return sorted_notes
 
-def reorder_csv_by_tag(in_path: str, out_path: str, custom_tag_order: Collection[str], batch_limit: int):
+def reorder_csv_by_tag(
+    in_path: str,
+    out_path: str,
+    custom_tag_order: Collection[str],
+    batch_limit: int,
+    shuffle_within_tags: bool = False,
+) -> None:
     notes = read_csv(in_path)
-    sorted_notes = sort_notes_by_tag(custom_tag_order, notes, batch_limit)
+    sorted_notes = sort_notes_by_tag(custom_tag_order, notes, batch_limit, shuffle_within_tags=shuffle_within_tags)
 
     write_csv(out_path, sorted_notes)
