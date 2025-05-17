@@ -1,10 +1,13 @@
+from typing import Collection
 from pathlib import Path
 from os import system
 from os.path import exists
 import re
 import csv
-import requests
 from bs4 import BeautifulSoup
+
+import numpy as np
+import requests
 
 CSV_PATH = "biglist.csv"
 ANKI_MEDIA = ".local/share/Anki2/User 1/collection.media/"
@@ -114,11 +117,16 @@ def word_list():
     write_csv(CSV_PATH, notes)
 
 
-def write_csv(filename, notes):
-    notes.sort(key=lambda note: frequency(note.headword))
+def write_csv(filename: str, notes: list[Note]) -> None:
     with open(filename, "w") as file:
         file.writelines([str(note) + "\n" for note in notes])
 
+def sort_and_write_csv(filename: str, notes: list[Note]) -> None:
+    """Sorts notes in-place by English word frequency, and then writes to csv
+    (replaces functionality of write_csv function from repo this is forked from)
+    """
+    notes.sort(key=lambda note: frequency(note.headword))
+    write_csv(filename, notes)
 
 def convert_video(url):
     temp = Path("/tmp/")
@@ -159,3 +167,59 @@ def add_signs(signs, tags, output):
     for sign in signs:
         notes += get_definitions("https://www.signbsl.com/sign/" + sign, tags)
     write_csv(output, notes)
+
+
+def sort_notes_by_tag(custom_tag_order: Collection[str], notes: list[Note], batch_limit: int) -> list[Note]:
+    """Sort notes by tag, using custom tag order.
+    Only take batch_limit words from each tag before moving onto next.
+    Keep cycling through the given tag list extracting batches until none of any listed tag remains.
+    Then assign any remaining words not covered by supplied tags.
+    """
+
+    tracked_notes = [{'selected': False, 'note': note} for note in notes]
+    
+    notes_by_tag = {}
+    for note in tracked_notes:
+        for tag in note['note'].tags:
+            if tag not in notes_by_tag:
+                notes_by_tag[tag] = []
+            notes_by_tag[tag].append(note)
+    
+    def _add_note(note_list, tracked_note):
+        if tracked_note['selected']:
+            return False
+        
+        note_list.append(tracked_note['note'])
+        tracked_note['selected'] = True
+        return True
+    
+    sorted_notes = []
+    spent_tags = set()
+    while len(spent_tags) < len(custom_tag_order):
+        for tag in custom_tag_order:
+            if tag in spent_tags:
+                continue
+
+            notes_with_tag = notes_by_tag[tag]
+            traversal_order = np.random.choice(len(notes_with_tag), size=len(notes_with_tag), replace=False)
+            counter = 0
+            for idx in traversal_order:
+                if _add_note(sorted_notes, notes_with_tag[idx]):
+                    counter += 1
+                if counter >= batch_limit:
+                    break
+
+            if counter < batch_limit:
+                spent_tags.add(tag)
+
+    for note in tracked_notes:
+        if _add_note(sorted_notes, note):
+            print(f'Note {note['note'].headword} was not covered by provided tag order, so putting at end.')
+
+    return sorted_notes
+
+def reorder_csv_by_tag(in_path: str, out_path: str, custom_tag_order: Collection[str], batch_limit: int):
+    notes = read_csv(in_path)
+    sorted_notes = sort_notes_by_tag(custom_tag_order, notes, batch_limit)
+
+    write_csv(out_path, sorted_notes)
